@@ -1,0 +1,5 @@
+*.o
+*.bak
+*~
+*.d
+ws2812_rainbow_rpi
