@@ -82,16 +82,46 @@ gen_new_pixel(float max_bright) {
 	if (saturation_phase > TWOPIf)
 		saturation_phase -= TWOPIf;
 
-//	printf("rgb=%5.3f sat=%5.3f\n", rgb_phase, saturation_phase);
-
 	return r8 | (g8 << 8) | (b8 << 16) | (w8 << 24);
 }
+
+static void
+usage(char *argv0) {
+	fprintf(stderr, "Usage: %s [options]\n", argv0);
+	fprintf(stderr, "-h              this help\n");
+	fprintf(stderr, "-r/-g/-b/-w/-0  test mode red, green, blue, white, off\n");
+	fprintf(stderr, "-i N            intensity 0..255\n");
+}
+
+enum test_mode {
+	TEST_NONE,
+	TEST_CLEAR,
+	TEST_R,
+	TEST_G,
+	TEST_B,
+	TEST_W
+};
+
 
 int
 main(int argc, char **argv) {
 	int ret;
+	int i;
+	float intensity = 10.0f;
+	enum test_mode test_mode = TEST_NONE;
+	uint32_t test_fill;
 
-	fprintf(stderr, "Hello, world!\n");
+	while ((i = getopt(argc, argv, "hrgbw0i:")) != -1) {
+		switch (i) {
+		case 'h': usage(argv[0]); exit(1); break;
+		case 'r': test_mode = TEST_R; break;
+		case 'g': test_mode = TEST_G; break;
+		case 'b': test_mode = TEST_B; break;
+		case 'w': test_mode = TEST_W; break;
+		case '0': test_mode = TEST_CLEAR; break;
+		case 'i': intensity = strtof(optarg, NULL); break;
+		}
+	}
 
 	signal(SIGINT, &sighandler_int_term);
 	signal(SIGTERM, &sighandler_int_term);
@@ -103,6 +133,24 @@ main(int argc, char **argv) {
 
 	memset(ledstring.channel[0].leds, '\0', sizeof(uint32_t) * ledstring.channel[0].count);
 
+	switch (test_mode) {
+		case TEST_R: test_fill = 0x0000ff00; break;
+		case TEST_G: test_fill = 0x00ff0000; break;
+		case TEST_B: test_fill = 0x000000ff; break;
+		case TEST_W: test_fill = 0xff000000; break;
+		case TEST_CLEAR: test_fill = 0x00000000; break;
+		default: break;
+	}
+
+	if (test_mode != TEST_NONE) {
+		for (i = 0; i<ledstring.channel[0].count; i++)
+			ledstring.channel[0].leds[i] = test_fill;
+		if ((ret = ws2811_render(&ledstring)) != WS2811_SUCCESS) {
+			fprintf(stderr, "ws2811_render failed: %s\n", ws2811_get_return_t_str(ret));
+		}
+		goto out;
+	}
+
 	keep_running = 1;
 	while (keep_running) {
 		usleep(33333);
@@ -110,7 +158,7 @@ main(int argc, char **argv) {
 		memmove((void*)(ledstring.channel[0].leds) + sizeof(uint32_t),
 			(void*)(ledstring.channel[0].leds),
 			sizeof(uint32_t) * (ledstring.channel[0].count - 1));
-		ledstring.channel[0].leds[0] = gen_new_pixel(255.0f);
+		ledstring.channel[0].leds[0] = gen_new_pixel(intensity);
 
 		if ((ret = ws2811_render(&ledstring)) != WS2811_SUCCESS) {
 			fprintf(stderr, "ws2811_render failed: %s\n", ws2811_get_return_t_str(ret));
@@ -118,5 +166,7 @@ main(int argc, char **argv) {
 		}
 	}
 
+out:
 	ws2811_fini(&ledstring);
+	return 0;
 }
